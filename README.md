@@ -1,39 +1,57 @@
 # Bolsillo
 
-App web adaptable para registrar ingresos y gastos, consultar su historial, crear metas de ahorro y programar recordatorios.
+App web adaptable para registrar ingresos y gastos, consultar el historial, crear metas de ahorro y programar recordatorios.
 
-## Iniciar la app
+## Desarrollo local
 
-1. Usa Node.js 20.19+ o 22.12+.
-2. Ejecuta `npm install`.
-3. Ejecuta `npm run dev`.
+Requiere Node.js 20.19+ o 22.12+.
 
-Sin configurar servicios, los datos se guardan en el navegador de este dispositivo. **Descargar respaldo JSON** genera una copia portable. **Guardar historial en PDF** abre el diálogo de impresión del navegador; ahí selecciona **Guardar como PDF**.
+```bash
+npm install
+npx convex dev
+```
 
-## Activar inicio de sesión y sincronización
+En otra terminal, crea `.env.local` en la raíz con los valores de desarrollo:
 
-La interfaz de acceso usa Clerk y la nube usa Convex. Para activarlos:
+```env
+VITE_CLERK_PUBLISHABLE_KEY=pk_test_tu_clave_de_clerk
+VITE_CONVEX_URL=https://tu-deployment.convex.cloud
+```
 
-1. Crea una aplicación en Clerk, elige los métodos de acceso y activa la integración de Convex.
-2. Crea o vincula un proyecto de Convex con `npx convex dev`.
-3. En el panel de Clerk, copia la clave pública (`pk_test_...`) y la URL de Frontend API (`https://...clerk.accounts.dev`).
-4. Copia `.env.example` a `.env` y añade los valores:
+Activa la integración Convex en tu aplicación Clerk de desarrollo y configura su Frontend API URL como emisor del despliegue de desarrollo:
 
-   ```env
-   VITE_CLERK_PUBLISHABLE_KEY=pk_test_...
-   VITE_CONVEX_URL=https://...convex.cloud
-   ```
+```bash
+npx convex env set CLERK_JWT_ISSUER_DOMAIN "https://tu-instancia.clerk.accounts.dev"
+```
 
-5. Configura el emisor de Clerk en el entorno de Convex:
+En una tercera terminal ejecuta `npm run dev` y abre la URL que muestra Vite. `.env.local` no se sube a Git.
+
+Sin credenciales, la app funciona en modo local y guarda datos en el navegador. Puedes descargar una copia JSON o imprimir el historial y guardarlo como PDF.
+
+## Publicar
+
+### Convex de producción
+
+1. En Clerk, configura la instancia de producción, activa la integración Convex y copia su Frontend API URL y Publishable key (`pk_live_...`). Usa la misma instancia en Convex y en el frontend.
+2. Configura el emisor y despliega desde la raíz del proyecto:
 
    ```bash
-   npx convex env set CLERK_JWT_ISSUER_DOMAIN https://...clerk.accounts.dev
+   npx convex env set --prod CLERK_JWT_ISSUER_DOMAIN "URL_FRONTEND_API_DE_CLERK_PRODUCCIÓN"
+   npx convex deploy
    ```
 
-6. Ejecuta `npx convex dev` para desplegar `auth.config.ts`, el esquema y las funciones. En otra terminal ejecuta `npm run dev`.
+   Confirma el despliegue con `Y` si la CLI lo pregunta. Anota la URL de producción que termina en `.convex.cloud`.
 
-Al iniciar sesión, Bolsillo sincroniza ingresos, gastos, metas y recordatorios entre dispositivos. Las funciones de Convex comprueban la identidad y guardan cada conjunto de datos bajo el usuario autenticado. Sin esas claves, la app sigue funcionando en modo local.
+### Web en Vercel
 
-## PWA
+1. Importa el repositorio `TUWINS/bolsillo` en Vercel. `vercel.json` ya define instalación (`npm ci`), compilación (`npm run build`) y salida (`dist`).
+2. En **Project → Settings → Environment Variables**, agrega para **Production**:
 
-Vite genera el manifiesto y el service worker. Para probar la versión instalable, ejecuta `npm run build` y `npm run preview`.
+   ```env
+   VITE_CLERK_PUBLISHABLE_KEY=pk_live_tu_clave_de_clerk
+   VITE_CONVEX_URL=https://tu-deployment-de-produccion.convex.cloud
+   ```
+
+3. Guarda y vuelve a desplegar. Autoriza el dominio asignado por Vercel en Clerk si el panel lo solicita.
+
+Vercel no lee `.env` ni `.env.local`; las variables de producción se agregan en su panel. No publiques claves secretas. Los cambios posteriores en `main` generan un despliegue nuevo cuando el repositorio está conectado.
