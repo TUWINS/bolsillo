@@ -14,19 +14,19 @@ export type ClerkSession = {
 };
 export type CloudSession = { clerk: ClerkSession; convex: ConvexClient };
 
-type ClerkConstructor = new (key: string) => ClerkSession;
 type ClerkWindow = Window & {
-  Clerk?: ClerkConstructor;
+  Clerk?: ClerkSession;
   __internal_ClerkUICtor?: unknown;
 };
 
-function loadScript(src: string): Promise<void> {
+function loadScript(src: string, publishableKey?: string): Promise<void> {
   if ([...document.scripts].some(script => script.src === src)) return Promise.resolve();
   return new Promise((resolve, reject) => {
     const script = document.createElement('script');
     script.src = src;
     script.async = true;
     script.crossOrigin = 'anonymous';
+    if (publishableKey) script.dataset.clerkPublishableKey = publishableKey;
     script.onload = () => resolve();
     script.onerror = () => reject(new Error('No se pudo cargar el formulario seguro de inicio de sesión.'));
     document.head.append(script);
@@ -43,11 +43,11 @@ export async function createCloudSession(): Promise<CloudSession | null> {
   const clerkDomain = atob(encodedDomain).slice(0, -1);
   const global = window as ClerkWindow;
   await loadScript(`https://${clerkDomain}/npm/@clerk/ui@1/dist/ui.browser.js`);
-  await loadScript(`https://${clerkDomain}/npm/@clerk/clerk-js@6/dist/clerk.browser.js`);
+  await loadScript(`https://${clerkDomain}/npm/@clerk/clerk-js@6/dist/clerk.browser.js`, publishableKey);
   const ui = global.__internal_ClerkUICtor;
   if (!ui) throw new Error('Clerk no cargó su interfaz de acceso.');
   if (!global.Clerk) throw new Error('Clerk no pudo iniciar en este navegador.');
-  const clerk = new global.Clerk(publishableKey);
+  const clerk = global.Clerk;
   await clerk.load({ ui: { ClerkUI: ui } });
 
   const convex = new ConvexClient(convexUrl);
