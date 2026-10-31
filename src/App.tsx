@@ -8,6 +8,9 @@ type Reminder = { id: string; title: string; date: string; time: string; done: b
 type AppData = { transactions: Transaction[]; goals: Goal[]; reminders: Reminder[] };
 
 const KEY = 'finora-data-v1';
+const EMPTY_DATA: AppData = { transactions: [], goals: [], reminders: [] };
+const DEMO_TRANSACTION_IDS = new Set(['t1', 't2', 't3']);
+const DEMO_GOAL_IDS = new Set(['g1', 'g2']);
 const money = (value: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(value);
 const today = () => { const date = new Date(); date.setMinutes(date.getMinutes() - date.getTimezoneOffset()); return date.toISOString().slice(0, 10); };
 const categories = ['Comida', 'Transporte', 'Hogar', 'Salud', 'Compras', 'Entretenimiento', 'Servicios', 'Otros'];
@@ -24,13 +27,26 @@ const initialData: AppData = {
   reminders: []
 };
 
-function readData(): AppData {
+function readData(key = KEY, fallback: AppData = initialData): AppData {
   try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return initialData;
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
     const parsed = JSON.parse(raw) as Partial<AppData>;
     return { transactions: parsed.transactions ?? [], goals: parsed.goals ?? [], reminders: parsed.reminders ?? [] };
-  } catch { return initialData; }
+  } catch { return fallback; }
+}
+
+function accountDataKey(clerk: CloudSession['clerk']): string {
+  const identifier = clerk.user?.id ?? clerk.user?.primaryEmailAddress?.emailAddress ?? clerk.user?.username ?? 'unknown';
+  return `${KEY}:account:${encodeURIComponent(identifier)}`;
+}
+
+function withoutDemoData(data: AppData): AppData {
+  return {
+    transactions: data.transactions.filter(item => !DEMO_TRANSACTION_IDS.has(item.id)),
+    goals: data.goals.filter(item => !DEMO_GOAL_IDS.has(item.id)),
+    reminders: data.reminders
+  };
 }
 
 function Icon(props: { name: string; size?: number }) {
@@ -39,7 +55,7 @@ function Icon(props: { name: string; size?: number }) {
 }
 
 function App(props: { cloud: CloudSession | null; cloudError?: string | null }) {
-  const [data, setData] = createSignal<AppData>({ transactions: [], goals: [], reminders: [] });
+  const [data, setData] = createSignal<AppData>(EMPTY_DATA);
   const [page, setPage] = createSignal('Inicio');
   const [modal, setModal] = createSignal<'transaction' | 'goal' | 'reminder' | 'account' | null>(null);
   const [kind, setKind] = createSignal<Kind>('expense');
@@ -82,18 +98,26 @@ function App(props: { cloud: CloudSession | null; cloudError?: string | null }) 
       stopCloudQuery?.();
       stopCloudQuery = undefined;
       const cloud = props.cloud;
-      if (!cloud?.clerk.isSignedIn) { setAccountEmail(''); return; }
+      if (!cloud?.clerk.isSignedIn) { setAccountEmail(''); setData(readData()); return; }
+      const localAccountKey = accountDataKey(cloud.clerk);
       setAccountEmail(cloud.clerk.user?.primaryEmailAddress?.emailAddress ?? cloud.clerk.user?.username ?? 'Cuenta conectada');
+      setData(readData(localAccountKey, EMPTY_DATA));
       cloud.convex.setAuth(async () => cloud.clerk.session?.getToken({ template: 'convex' }) ?? null);
       let receivedFirstResult = false;
       stopCloudQuery = cloud.convex.onUpdate(financeApi.getMyData, {}, remoteData => {
         receivedFirstResult = true;
         if (remoteData) {
-          const next = remoteData as AppData;
+          const original = remoteData as AppData;
+          const next = withoutDemoData(original);
           setData(next);
-          localStorage.setItem(KEY, JSON.stringify(next));
+          localStorage.setItem(localAccountKey, JSON.stringify(next));
+          if (next.transactions.length !== original.transactions.length || next.goals.length !== original.goals.length) {
+            void cloud.convex.mutation(financeApi.saveMyData, { data: next }).catch(error => setCloudError(error instanceof Error ? error.message : 'No se pudieron limpiar los datos de ejemplo.'));
+          }
         } else {
-          const local = readData();
+          const local = readData(localAccountKey, EMPTY_DATA);
+          setData(local);
+          localStorage.setItem(localAccountKey, JSON.stringify(local));
           void cloud.convex.mutation(financeApi.saveMyData, { data: local }).catch(error => setCloudError(error instanceof Error ? error.message : 'No se pudo sincronizar la cuenta.'));
         }
       }, error => {
@@ -109,8 +133,10 @@ function App(props: { cloud: CloudSession | null; cloudError?: string | null }) 
   });
   const save = (next: AppData) => {
     setData(next);
-    localStorage.setItem(KEY, JSON.stringify(next));
-    if (props.cloud?.clerk.isSignedIn) void props.cloud.convex.mutation(financeApi.saveMyData, { data: next }).catch(error => setCloudError(error instanceof Error ? error.message : 'No se pudo guardar en la nube.'));
+    const signedIn = Boolean(props.cloud?.clerk.isSignedIn);
+    const storageKey = signedIn && props.cloud ? accountDataKey(props.cloud.clerk) : KEY;
+    localStorage.setItem(storageKey, JSON.stringify(next));
+    if (signedIn && props.cloud) void props.cloud.convex.mutation(financeApi.saveMyData, { data: next }).catch(error => setCloudError(error instanceof Error ? error.message : 'No se pudo guardar en la nube.'));
   };
   const thisMonth = createMemo(() => data().transactions.filter(t => t.date.slice(0, 7) === today().slice(0, 7)));
   const income = createMemo(() => thisMonth().filter(t => t.kind === 'income').reduce((a, t) => a + t.amount, 0));

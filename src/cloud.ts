@@ -4,7 +4,7 @@ import { anyApi } from 'convex/server';
 export const financeApi = anyApi.finance;
 export type ClerkSession = {
   isSignedIn: boolean;
-  user?: { primaryEmailAddress?: { emailAddress: string } | null; username?: string | null } | null;
+  user?: { id?: string; primaryEmailAddress?: { emailAddress: string } | null; username?: string | null } | null;
   session?: { getToken: (options: { template: string }) => Promise<string | null> } | null;
   addListener: (callback: () => void) => () => void;
   mountSignIn: (element: HTMLDivElement) => void;
