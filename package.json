@@ -1,0 +1,23 @@
+{
+  "name": "bolsillo-gastos",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "convex:dev": "convex dev"
+  },
+  "dependencies": {
+    "convex": "^1.48.0",
+    "solid-js": "^1.9.9"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "~5.9.3",
+    "vite": "^7.2.0",
+    "vite-plugin-pwa": "^1.1.0",
+    "vite-plugin-solid": "^2.11.8"
+  }
+}
